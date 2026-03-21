@@ -9,39 +9,37 @@ export default function SettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [googleConnected, setGoogleConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-    }
-    if (status === "authenticated") {
-      checkGoogleConnection();
-    }
-  }, [status, router]);
 
   const checkGoogleConnection = async () => {
     try {
       const res = await fetch("/api/user");
-      if (res.ok) {
-        const data = await res.json();
-        setGoogleConnected(!!data.googleAccessToken);
+      const data = await res.json();
+      console.log("User data:", data);
+      if (res.ok && !data.error) {
+        setGoogleConnected(!!data?.googleAccessToken);
+      } else {
+        console.error("Error fetching user:", data.error);
       }
     } catch (err) {
       console.error("Error checking Google connection:", err);
     }
   };
 
-  const connectGoogle = async () => {
-    setConnecting(true);
-    try {
-      const result = await signIn("google", { redirect: false });
-      if (result?.ok) {
-        checkGoogleConnection();
-      }
-    } finally {
-      setConnecting(false);
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
     }
+  }, [status, router]);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      const timer = setTimeout(checkGoogleConnection, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
+
+  const connectGoogle = () => {
+    signIn("google", { callbackUrl: "/settings" });
   };
 
   const disconnectGoogle = async () => {
@@ -141,10 +139,9 @@ export default function SettingsPage() {
                 ) : (
                   <button
                     onClick={connectGoogle}
-                    disabled={connecting}
-                    className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl transition-all text-sm disabled:opacity-50"
+                    className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl transition-all text-sm"
                   >
-                    {connecting ? "Connecting..." : "Connect"}
+                    Connect
                   </button>
                 )}
               </div>
@@ -152,7 +149,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 border border-white/20">
-            <h2 className="text-xl font-semibold text-white mb-4">Danger Zone</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">Actions</h2>
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 bg-red-500/10 rounded-xl border border-red-500/20">
                 <div>

@@ -6,11 +6,24 @@ import { compare, hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+if (!process.env.AUTH_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET must be set in production");
+  }
+  console.warn("WARNING: AUTH_SECRET not set. Using development secret.");
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret: process.env.AUTH_SECRET || "development-secret-do-not-use-in-production",
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: "openid email profile https://www.googleapis.com/auth/presentations",
+        },
+      },
     }),
     Credentials({
       credentials: {
@@ -80,6 +93,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return session;
     },
     async signIn({ user, account }) {
+      console.log("Google signIn callback:", { email: user.email, account: !!account, provider: account?.provider });
       if (account?.provider === "google") {
         const existing = await prisma.user.findUnique({ where: { email: user.email! } });
         if (existing) {
