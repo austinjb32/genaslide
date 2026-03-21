@@ -30,7 +30,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (isSignUp === "true") {
           const existing = await prisma.user.findUnique({ where: { email } });
           if (existing) {
-            throw new Error("User already exists");
+            if (existing.password) {
+              throw new Error("Email already registered. Please sign in instead.");
+            }
+            const hashedPassword = await hash(password, 10);
+            const updated = await prisma.user.update({
+              where: { id: existing.id },
+              data: {
+                password: hashedPassword,
+                name: name || existing.name,
+              },
+            });
+            return { id: updated.id, email: updated.email, name: updated.name };
           }
           const hashedPassword = await hash(password, 10);
           const newUser = await prisma.user.create({
@@ -46,6 +57,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) {
           throw new Error("Invalid credentials");
+        }
+        if (!user.password) {
+          throw new Error("Please sign in with Google for this account");
         }
         const isValid = await compare(password, user.password);
         if (!isValid) {
