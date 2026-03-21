@@ -393,9 +393,14 @@ export default function DashboardPage() {
                   <textarea
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
-                    className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none"
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      target.style.height = "auto";
+                      target.style.height = target.scrollHeight + "px";
+                    }}
+                    className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none overflow-hidden"
                     placeholder="e.g., The Future of Artificial Intelligence in Healthcare"
-                    rows={4}
+                    style={{ minHeight: "100px" }}
                     required
                   />
                 </div>
