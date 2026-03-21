@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface Slide {
   id: number;
@@ -38,9 +39,8 @@ export default function DashboardPage() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [generatingImages, setGeneratingImages] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editData, setEditData] = useState("");
   const [loadingPresentations, setLoadingPresentations] = useState(true);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -230,54 +230,26 @@ export default function DashboardPage() {
     }
   };
 
-  const exportToSheets = () => {
+  const openInGoogleSlides = async () => {
     if (!presentation) return;
-    const header = "Slide #\tTitle\tContent\tLayout";
-    const rows = presentation.slides.map(
-      (slide) => `${slide.id}\t${slide.title}\t${slide.content.replace(/\n/g, " ")}\t${slide.layout}`
-    );
-    const tsv = [header, ...rows].join("\n");
-    const blob = new Blob([tsv], { type: "text/tab-separated-values" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${presentation.title.replace(/[^a-z0-9]/gi, "_")}_edit.tsv`;
-    document.body.appendChild(a);
-    a.click();
-    URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  };
 
-  const importFromSheets = () => {
-    if (!editData.trim()) return;
-    const lines = editData.trim().split("\n");
-    if (lines.length < 2) return;
+    const res = await fetch("/api/google-slides", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ presentation }),
+    });
 
-    const headers = lines[0].split("\t").map((h) => h.toLowerCase().trim());
-    const titleIdx = headers.indexOf("title");
-    const contentIdx = headers.indexOf("content");
-    const layoutIdx = headers.indexOf("layout");
-
-    if (titleIdx === -1 || contentIdx === -1) return;
-
-    const updatedSlides: Slide[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split("\t");
-      updatedSlides.push({
-        id: i,
-        title: cols[titleIdx] || `Slide ${i}`,
-        content: cols[contentIdx] || "",
-        layout: (layoutIdx !== -1 && cols[layoutIdx] ? cols[layoutIdx] : "content") as Slide["layout"],
-        backgroundImage: presentation?.slides[i - 1]?.backgroundImage,
-      });
+    if (res.ok) {
+      const data = await res.json();
+      window.open(data.url, "_blank");
+    } else {
+      const error = await res.json();
+      if (error.needsAuth) {
+        alert("Please sign in with Google to use this feature");
+      } else {
+        alert(error.error || "Failed to create Google Slides");
+      }
     }
-
-    if (updatedSlides.length > 0) {
-      setPresentation({ ...presentation!, slides: updatedSlides });
-      setCurrentSlide(0);
-    }
-    setShowEditModal(false);
-    setEditData("");
   };
 
   const renderSlideContent = (slide: Slide) => {
@@ -347,18 +319,55 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                {session.user?.name?.[0]?.toUpperCase() || "U"}
-              </div>
-              <span className="text-white">{session.user?.name}</span>
+            <div className="relative">
+              <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="flex items-center gap-3 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all"
+              >
+                <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                  {session.user?.name?.[0]?.toUpperCase() || "U"}
+                </div>
+                <span className="text-white text-sm">{session.user?.name}</span>
+                <svg className="w-4 h-4 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showDropdown && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-10" 
+                    onClick={() => setShowDropdown(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 rounded-xl border border-white/10 shadow-xl z-20 overflow-hidden">
+                    <Link
+                      href="/settings"
+                      onClick={() => setShowDropdown(false)}
+                      className="flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 transition-all"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Settings
+                    </Link>
+                    <div className="border-t border-white/10" />
+                    <button
+                      onClick={() => {
+                        setShowDropdown(false);
+                        signOut({ callbackUrl: "/login" });
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-white/10 transition-all"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-            <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl transition-all"
-            >
-              Sign Out
-            </button>
           </div>
         </div>
       </nav>
@@ -503,16 +512,13 @@ export default function DashboardPage() {
                   )}
                 </button>
                 <button
-                  onClick={() => {
-                    exportToSheets();
-                    setShowEditModal(true);
-                  }}
+                  onClick={openInGoogleSlides}
                   className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl transition-all flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
                   </svg>
-                  Edit
+                  Google Slides
                 </button>
                 <button
                   onClick={() => downloadFile("pptx")}
@@ -635,76 +641,6 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
-
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-3xl p-6 w-full max-w-4xl border border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-white">Edit in Google Sheets</h3>
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditData("");
-                }}
-                className="text-white/60 hover:text-white"
-              >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="bg-green-500/20 border border-green-500/50 rounded-xl p-4 text-sm text-green-200">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-medium">Instructions:</p>
-                  <button
-                    onClick={exportToSheets}
-                    className="px-3 py-1 bg-green-500/30 hover:bg-green-500/50 text-green-200 rounded-lg text-xs font-medium flex items-center gap-1"
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Export TSV
-                  </button>
-                </div>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Click &quot;Export TSV&quot; to download the file</li>
-                  <li>Open in Google Sheets (File &gt; Open &gt; Upload)</li>
-                  <li>Edit the content in Google Sheets</li>
-                  <li>Copy the entire sheet data (Ctrl+A, Ctrl+C)</li>
-                  <li>Paste it below and click &quot;Import&quot;</li>
-                </ol>
-              </div>
-              <div>
-                <label className="block text-white font-medium mb-2">Paste TSV Data from Google Sheets</label>
-                <textarea
-                  value={editData}
-                  onChange={(e) => setEditData(e.target.value)}
-                  className="w-full h-64 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                  placeholder="Paste your TSV data here..."
-                />
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={importFromSheets}
-                  className="flex-1 py-3 bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white font-semibold rounded-xl transition-all"
-                >
-                  Import
-                </button>
-                <button
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditData("");
-                  }}
-                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing code. Heed deprecation notices.
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
 # GenaSlide - AI-Powered Presentation Generator
@@ -13,6 +13,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - PostgreSQL with Prisma ORM
 - OpenRouter API (gpt-oss-model) - slide content generation
 - Replicate API (flux-schnell) - background image generation
+- Google Slides API - export presentations
 
 ## Commands
 - `npm run dev` - Start development server
@@ -25,6 +26,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `DATABASE_URL` - PostgreSQL connection string
 - `OPENROUTER_API_KEY` - OpenRouter API key for AI slide generation
 - `REPLICATE_API_TOKEN` - Replicate API token for AI image generation
+- `GOOGLE_CLIENT_ID` - Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 
 ## Key Files
 - `auth.ts` - NextAuth configuration
@@ -34,6 +37,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `app/api/slides/route.ts` - Slide generation API
 - `app/api/images/route.ts` - Image generation API
 - `app/api/download/route.ts` - PPTX/PDF download API
+- `app/api/google-slides/route.ts` - Google Slides export API
+- `app/api/presentations/route.ts` - Save/load presentations
 - `app/dashboard/page.tsx` - Main app interface
 - `app/(auth)/login/page.tsx` - Login page
 - `app/(auth)/signup/page.tsx` - Signup page

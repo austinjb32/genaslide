@@ -1,12 +1,17 @@
 import { PrismaClient } from "@prisma/client";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import { compare, hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
@@ -59,6 +64,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.sub as string;
       }
       return session;
+    },
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        const existing = await prisma.user.findUnique({ where: { email: user.email! } });
+        if (existing) {
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: {
+              googleAccessToken: account.access_token,
+              googleRefreshToken: account.refresh_token,
+            },
+          });
+        } else {
+          await prisma.user.create({
+            data: {
+              email: user.email!,
+              name: user.name || user.email!.split("@")[0],
+              password: "",
+              googleAccessToken: account.access_token,
+              googleRefreshToken: account.refresh_token,
+            },
+          });
+        }
+      }
+      return true;
     },
   },
   trustHost: true,
