@@ -41,6 +41,9 @@ export default function DashboardPage() {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [loadingPresentations, setLoadingPresentations] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showEnhanceModal, setShowEnhanceModal] = useState(false);
+  const [enhancePrompt, setEnhancePrompt] = useState("");
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -110,19 +113,33 @@ export default function DashboardPage() {
   const savePresentation = async () => {
     if (!presentation) return;
     try {
-      const res = await fetch("/api/presentations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: presentation.title,
-          topic: topic,
-          slides: presentation.slides,
-        }),
-      });
-      if (res.ok) {
-        const saved = await res.json();
-        setPresentation({ ...presentation, id: saved.id });
-        fetchPresentations();
+      if (presentation.id) {
+        const res = await fetch(`/api/presentations/${presentation.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: presentation.title,
+            slides: presentation.slides,
+          }),
+        });
+        if (res.ok) {
+          fetchPresentations();
+        }
+      } else {
+        const res = await fetch("/api/presentations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: presentation.title,
+            topic: topic,
+            slides: presentation.slides,
+          }),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setPresentation({ ...presentation, id: saved.id });
+          fetchPresentations();
+        }
       }
     } catch (err) {
       console.error("Error saving presentation:", err);
@@ -196,6 +213,38 @@ export default function DashboardPage() {
       console.error("Error generating images:", err);
     } finally {
       setGeneratingImages(false);
+    }
+  };
+
+  const enhancePresentation = async () => {
+    if (!presentation || !enhancePrompt.trim()) return;
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/slides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          topic: enhancePrompt,
+          existingTopic: topic,
+          existingSlides: presentation.slides 
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to enhance slides");
+      }
+
+      setPresentation({ ...data, id: presentation.id });
+      setCurrentSlide(0);
+      setShowEnhanceModal(false);
+      setEnhancePrompt("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -310,6 +359,16 @@ export default function DashboardPage() {
       <nav className="border-b border-white/10 bg-black/20 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {presentation && (
+              <button
+                onClick={() => setPresentation(null)}
+                className="p-2 hover:bg-white/10 rounded-lg transition-all"
+              >
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
             <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
@@ -478,93 +537,94 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-white">{presentation.title}</h1>
+                {topic && (
+                  <p className="text-white/60 text-sm mt-1 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                    </svg>
+                    {topic.length > 80 ? topic.slice(0, 80) + "..." : topic}
+                  </p>
+                )}
                 <p className="text-purple-200 mt-1">
                   Slide {currentSlide + 1} of {presentation.slides.length}
                 </p>
               </div>
               <div className="flex gap-3">
-                {!presentation.id && (
-                  <button
-                    onClick={savePresentation}
-                    className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 rounded-xl transition-all flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                    </svg>
-                    Save
-                  </button>
-                )}
                 <button
-                  onClick={generateImages}
-                  disabled={generatingImages}
-                  className="px-4 py-2 bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  {generatingImages ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      Generate Images
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={openInGoogleSlides}
-                  className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl transition-all flex items-center gap-2"
+                  onClick={() => setShowEnhanceModal(true)}
+                  className="px-4 py-2 bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 rounded-xl transition-all flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
-                  Google Slides
+                  Enhance
                 </button>
                 <button
-                  onClick={() => downloadFile("pptx")}
-                  disabled={downloading !== null}
-                  className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
+                  onClick={savePresentation}
+                  className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 rounded-xl transition-all flex items-center gap-2"
                 >
-                  {downloading === "pptx" ? (
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  {presentation.id ? "Update" : "Save"}
+                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl transition-all flex items-center gap-2"
+                  >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
-                  )}
-                  PPTX
-                </button>
-                <button
-                  onClick={() => downloadFile("pdf")}
-                  disabled={downloading !== null}
-                  className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  {downloading === "pdf" ? (
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
+                    Export
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
+                  </button>
+                  {showExportMenu && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 rounded-xl border border-white/10 shadow-xl z-20 overflow-hidden">
+                        <button
+                          onClick={() => {
+                            openInGoogleSlides();
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 transition-all"
+                        >
+                          <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                          </svg>
+                          To Google Slides
+                        </button>
+                        <button
+                          onClick={() => {
+                            downloadFile("pptx");
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 transition-all"
+                        >
+                          <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          To PPTX
+                        </button>
+                        <button
+                          onClick={() => {
+                            downloadFile("pdf");
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 transition-all"
+                        >
+                          <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          To PDF
+                        </button>
+                      </div>
+                    </>
                   )}
-                  PDF
-                </button>
-                <button
-                  onClick={() => setPresentation(null)}
-                  className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
-                >
-                  Back
-                </button>
+                </div>
               </div>
             </div>
 
@@ -646,6 +706,89 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+
+      {showEnhanceModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-3xl p-6 w-full max-w-2xl border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Enhance Presentation</h3>
+                <p className="text-white/60 text-sm mt-1">Add or modify slides based on your requirements</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEnhanceModal(false);
+                  setEnhancePrompt("");
+                }}
+                className="text-white/60 hover:text-white"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              {topic && (
+                <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+                  <p className="text-white/60 text-xs mb-1">Current Topic:</p>
+                  <p className="text-white text-sm">{topic}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-white font-medium mb-2">What would you like to change?</label>
+                <textarea
+                  value={enhancePrompt}
+                  onChange={(e) => setEnhancePrompt(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none"
+                  placeholder="e.g., Add 2 more slides about pricing, Make the intro slide more catchy, Add a conclusion slide"
+                  rows={4}
+                />
+              </div>
+              <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-3 text-sm text-violet-200">
+                <p className="font-medium mb-1">Examples:</p>
+                <ul className="list-disc list-inside space-y-1 opacity-80">
+                  <li>&quot;Add 2 more slides about pricing&quot;</li>
+                  <li>&quot;Make the conclusion more impactful&quot;</li>
+                  <li>&quot;Add a quote slide with a relevant quote&quot;</li>
+                </ul>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={enhancePresentation}
+                  disabled={loading || !enhancePrompt.trim()}
+                  className="flex-1 py-3 bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Enhancing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Enhance Slides
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEnhanceModal(false);
+                    setEnhancePrompt("");
+                  }}
+                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
