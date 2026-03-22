@@ -61,8 +61,8 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-900 via-purple-900 to-indigo-900 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-white mb-2">GenaSlide</h1>
-          <p className="text-purple-200 text-lg">AI-Powered Presentations</p>
+          <h1 className="text-5xl font-bold text-white mb-2">GenASlide</h1>
+          <p className="text-purple-200 text-lg">Generate AI-Powered Presentations</p>
         </div>
 
         <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/20">

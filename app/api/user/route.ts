@@ -18,6 +18,8 @@ export async function GET() {
         id: true,
         name: true,
         email: true,
+        userType: true,
+        password: true,
         googleAccessToken: true,
         googleRefreshToken: true,
       },

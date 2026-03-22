@@ -46,7 +46,7 @@ async function generateSlides(apiKey: string, topic: string, systemPrompt: strin
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "openai/gpt-oss-120b",
+          model: "openai/gpt-oss-120b:free",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
@@ -136,26 +136,24 @@ IMPORTANT: Return ONLY the JSON, no markdown, no code blocks, no explanation.`;
 
     userPrompt = `User wants to change/improve their presentation about "${existingTopic}".\n\nTheir request: ${topic}\n\nPlease modify the slides to address their request. Keep the same structure but change the content as requested.`;
   } else {
-    systemPrompt = `You are an expert slide designer. Create a presentation with 5-7 slides based on the topic provided. Return ONLY valid JSON with this exact structure:
-{
-  "title": "Presentation Title",
-  "slides": [
-    {
-      "id": 1,
-      "title": "Slide Title",
-      "content": "Main content for the slide - keep it concise and impactful",
-      "layout": "title"
-    },
-    {
-      "id": 2,
-      "title": "Second Slide Title",
-      "content": "Key points to discuss on this slide",
-      "layout": "content"
-    }
-  ]
-}
-Use varied layouts: "title" for title/intro slides, "content" for regular content, "two-column" for comparisons (use | to separate columns), "quote" for impactful quotes.
-IMPORTANT: Return ONLY the JSON, no markdown, no code blocks, no explanation.`;
+    systemPrompt = `You are an expert presentation designer. Create a 6-8 slide presentation with TRENDY modern layouts.
+
+LAYOUTS (choose the best one for each slide):
+- "title" - Bold title slide with dramatic intro
+- "content" - Clean bullet points layout  
+- "stat" - For showcasing statistics/numbers (content: "- 100%: Efficiency\\n- 50+: Companies")
+- "cards" - 3 card grid layout (content: "- Card Title: Description\\n- Card 2: Desc\\n- Card 3: Desc")
+- "split" - Split screen with title on left, bullets on right
+- "quote" - For impactful quotes only
+- "two-column" - Side by side comparison (use | to separate)
+
+Return ONLY this JSON format:
+{"title":"Your Title","slides":[{"id":1,"title":"Slide Title","content":"- Point one\\n- Point two","layout":"title"},...]}
+
+RULES:
+- Return ONLY the JSON, no markdown or explanation
+- Use varied layouts throughout the presentation
+- Keep content SHORT and impactful`;
 
     userPrompt = `Create a presentation about: ${topic}`;
   }

@@ -23,23 +23,40 @@ export async function POST(request: Request) {
   try {
     const replicate = new Replicate({ auth: apiKey });
 
-    const output = await replicate.run("black-forest-labs/flux-schnell", {
+    let prediction = await replicate.predictions.create({
+      version: "fast-sdxl@0.9.1",
       input: {
-        prompt: `${prompt}, cinematic, dramatic lighting, presentation background, abstract, no text, no letters, no words, no typography, 16:9 aspect ratio, high quality, detailed`,
+        prompt: prompt,
         num_inference_steps: 4,
-        guidance: 0,
       },
     });
 
-    const imageUrl = (output as unknown as { url: () => string }[])[0]?.url?.() || (output as string[])[0];
+    let imageUrl = "";
+    let attempts = 0;
+    const maxAttempts = 60;
+
+    while (prediction.status !== "succeeded" && prediction.status !== "failed" && attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      prediction = await replicate.predictions.get(prediction.id);
+      attempts++;
+    }
+
+    if (prediction.status === "succeeded" && prediction.output) {
+      if (Array.isArray(prediction.output)) {
+        imageUrl = prediction.output[prediction.output.length - 1] as string;
+      } else if (typeof prediction.output === "string") {
+        imageUrl = prediction.output;
+      }
+    }
 
     if (!imageUrl) {
-      return NextResponse.json({ error: "No image generated" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to generate image. Please try again." }, { status: 500 });
     }
 
     return NextResponse.json({ imageUrl });
   } catch (error) {
     console.error("Error generating image:", error);
-    return NextResponse.json({ error: "Failed to generate image" }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "Failed to generate image";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

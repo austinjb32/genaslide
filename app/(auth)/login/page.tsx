@@ -27,9 +27,11 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(result.error === "Please sign in with Google for this account" 
-          ? "This account is registered with Google. Please use Sign in with Google." 
-          : "Invalid email or password");
+        if (result.error === "Please sign in with Google or set up a password") {
+          setError("No password set for this account. Please use Sign in with Google, or go to Settings to set up a password.");
+        } else {
+          setError("Invalid email or password");
+        }
       } else {
         router.push("/dashboard");
       }
@@ -55,8 +57,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-900 via-purple-900 to-indigo-900 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-white mb-2">GenaSlide</h1>
-          <p className="text-purple-200 text-lg">AI-Powered Presentations</p>
+          <h1 className="text-5xl font-bold text-white mb-2">GenASlide</h1>
+          <p className="text-purple-200 text-lg">Generate AI-Powered Presentations</p>
         </div>
 
         <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/20">

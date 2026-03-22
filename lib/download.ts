@@ -31,7 +31,7 @@ export async function generatePPTX(presentation: Presentation): Promise<Buffer> 
 
   pptx.layout = "LAYOUT_16x9";
   pptx.title = presentation.title;
-  pptx.author = "GenaSlide";
+  pptx.author = "GenASlide";
 
   for (const slideData of presentation.slides) {
     const slide = pptx.addSlide();

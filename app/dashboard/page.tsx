@@ -1,15 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+const Slideshow = dynamic(() => import("@/app/components/Slideshow"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[500px] rounded-2xl bg-white/10 flex items-center justify-center">
+      <div className="animate-spin h-12 w-12 border-4 border-purple-500 border-t-transparent rounded-full" />
+    </div>
+  ),
+});
 
 interface Slide {
   id: number;
   title: string;
   content: string;
-  layout: "title" | "content" | "two-column" | "quote";
+  layout: "title" | "content" | "two-column" | "quote" | "stat" | "cards" | "split";
   backgroundImage?: string;
 }
 
@@ -31,6 +41,8 @@ interface SavedPresentation {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const swiperRef = useRef<any>(null);
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -38,12 +50,18 @@ export default function DashboardPage() {
   const [savedPresentations, setSavedPresentations] = useState<SavedPresentation[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [generatingImages, setGeneratingImages] = useState(false);
-  const [downloading, setDownloading] = useState<string | null>(null);
   const [loadingPresentations, setLoadingPresentations] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showEnhanceModal, setShowEnhanceModal] = useState(false);
   const [enhancePrompt, setEnhancePrompt] = useState("");
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showImagePromptModal, setShowImagePromptModal] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [showFeatureRequestModal, setShowFeatureRequestModal] = useState(false);
+  const [featureRequestMessage, setFeatureRequestMessage] = useState("");
+  const [featureRequestSubmitted, setFeatureRequestSubmitted] = useState(false);
+  const [fullscreenMode, setFullscreenMode] = useState(false);
+  const [slideAnimations, setSlideAnimations] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -56,6 +74,23 @@ export default function DashboardPage() {
       fetchPresentations();
     }
   }, [session]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreenMode(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (currentSlide !== undefined && presentation) {
+      setSlideAnimations((prev) => ({ ...prev, [currentSlide]: true }));
+      setTimeout(() => {
+        setSlideAnimations((prev) => ({ ...prev, [currentSlide]: false }));
+      }, 600);
+    }
+  }, [currentSlide, presentation]);
 
   const fetchPresentations = async () => {
     try {
@@ -103,6 +138,7 @@ export default function DashboardPage() {
 
       setPresentation(data);
       setCurrentSlide(0);
+      setSlideAnimations({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -151,9 +187,10 @@ export default function DashboardPage() {
       const res = await fetch(`/api/presentations/${id}`);
       if (res.ok) {
         const data = await res.json();
-        setPresentation({ title: data.title, slides: data.slides });
+        setPresentation({ id: id, title: data.title, topic: data.topic, slides: data.slides });
         setTopic(data.topic || "");
         setCurrentSlide(0);
+        setSlideAnimations({});
       }
     } catch (err) {
       console.error("Error loading presentation:", err);
@@ -175,36 +212,58 @@ export default function DashboardPage() {
     }
   };
 
-  const generateImages = async () => {
+  const handleGenerateImages = () => {
+    setShowImagePromptModal(true);
+  };
+
+  const generateImages = async (customPrompt: string) => {
     if (!presentation) return;
     setGeneratingImages(true);
+    setShowImagePromptModal(false);
 
     try {
-      const updatedSlides = [...presentation.slides];
-      for (let i = 0; i < updatedSlides.length; i++) {
-        const slide = updatedSlides[i];
+      let currentPresentation = presentation;
+
+      if (!currentPresentation.id) {
+        const res = await fetch("/api/presentations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: currentPresentation.title,
+            topic: topic,
+            slides: currentPresentation.slides,
+          }),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          currentPresentation = { ...currentPresentation, id: saved.id };
+          setPresentation(currentPresentation);
+        }
+      }
+
+      for (let i = 0; i < currentPresentation.slides.length; i++) {
+        const slide = currentPresentation.slides[i];
         if (slide.layout === "title" || slide.layout === "quote") {
           setCurrentSlide(i);
           const res = await fetch("/api/images", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: slide.title }),
+            body: JSON.stringify({ prompt: customPrompt }),
           });
 
           if (res.ok) {
             const data = await res.json();
-            updatedSlides[i] = { ...slide, backgroundImage: data.imageUrl };
-            setPresentation({ ...presentation, slides: [...updatedSlides] });
-            if (presentation.id) {
-              await fetch(`/api/presentations/${presentation.id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  title: presentation.title,
-                  slides: updatedSlides,
-                }),
-              });
-            }
+            currentPresentation.slides[i] = { ...slide, backgroundImage: data.imageUrl };
+            setPresentation({ ...currentPresentation });
+
+            await fetch(`/api/presentations/${currentPresentation.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: currentPresentation.title,
+                slides: currentPresentation.slides,
+              }),
+            });
           }
           await new Promise((resolve) => setTimeout(resolve, 10000));
         }
@@ -216,6 +275,29 @@ export default function DashboardPage() {
     }
   };
 
+  const submitFeatureRequest = async () => {
+    if (!featureRequestMessage.trim()) return;
+
+    try {
+      const res = await fetch("/api/feature-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: featureRequestMessage }),
+      });
+
+      if (res.ok) {
+        setFeatureRequestSubmitted(true);
+        setFeatureRequestMessage("");
+        setTimeout(() => {
+          setShowFeatureRequestModal(false);
+          setFeatureRequestSubmitted(false);
+        }, 2000);
+      }
+    } catch (err) {
+      console.error("Error submitting feature request:", err);
+    }
+  };
+
   const enhancePresentation = async () => {
     if (!presentation || !enhancePrompt.trim()) return;
     setLoading(true);
@@ -224,10 +306,10 @@ export default function DashboardPage() {
       const res = await fetch("/api/slides", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           topic: enhancePrompt,
           existingTopic: topic,
-          existingSlides: presentation.slides 
+          existingSlides: presentation.slides,
         }),
       });
 
@@ -239,6 +321,7 @@ export default function DashboardPage() {
 
       setPresentation({ ...data, id: presentation.id });
       setCurrentSlide(0);
+      setSlideAnimations({});
       setShowEnhanceModal(false);
       setEnhancePrompt("");
     } catch (err) {
@@ -250,7 +333,6 @@ export default function DashboardPage() {
 
   const downloadFile = async (format: "pptx" | "pdf") => {
     if (!presentation) return;
-    setDownloading(format);
 
     try {
       const res = await fetch("/api/download", {
@@ -274,84 +356,18 @@ export default function DashboardPage() {
       document.body.removeChild(a);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Download failed");
-    } finally {
-      setDownloading(null);
     }
   };
 
-  const openInGoogleSlides = async () => {
-    if (!presentation) return;
-
-    const res = await fetch("/api/google-slides", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ presentation }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      window.open(data.url, "_blank");
+  const toggleFullscreen = async () => {
+    if (fullscreenMode) {
+      await document.exitFullscreen();
     } else {
-      const error = await res.json();
-      if (error.needsAuth) {
-        alert("Please sign in with Google to use this feature");
-      } else {
-        alert(error.error || "Failed to create Google Slides");
+      const elem = document.getElementById("slideshow-container");
+      if (elem?.requestFullscreen) {
+        await elem.requestFullscreen();
       }
     }
-  };
-
-  const renderSlideContent = (slide: Slide) => {
-    switch (slide.layout) {
-      case "title":
-        return (
-          <div className="flex flex-col items-center justify-center h-full text-center px-8">
-            <h2 className="text-5xl font-bold text-white mb-6">{slide.title}</h2>
-            <p className="text-xl text-purple-200">{slide.content}</p>
-          </div>
-        );
-      case "quote":
-        return (
-          <div className="flex flex-col items-center justify-center h-full text-center px-8">
-            <div className="text-8xl text-purple-500/30 mb-4">&ldquo;</div>
-            <p className="text-2xl text-white italic mb-6 max-w-3xl">{slide.content}</p>
-            <h3 className="text-xl font-semibold text-purple-300">{slide.title}</h3>
-          </div>
-        );
-      case "two-column":
-        const parts = slide.content.split("|");
-        return (
-          <div className="grid grid-cols-2 gap-12 h-full px-8 py-12">
-            <div className="flex flex-col justify-center">
-              <h3 className="text-3xl font-bold text-white mb-4">{slide.title}</h3>
-              <p className="text-lg text-purple-200">{parts[0] || slide.content}</p>
-            </div>
-            <div className="flex flex-col justify-center">
-              <p className="text-lg text-purple-200">{parts[1] || ""}</p>
-            </div>
-          </div>
-        );
-      default:
-        return (
-          <div className="flex flex-col justify-center h-full px-8 py-12">
-            <h3 className="text-3xl font-bold text-white mb-6">{slide.title}</h3>
-            <p className="text-xl text-purple-200 leading-relaxed">{slide.content}</p>
-          </div>
-        );
-    }
-  };
-
-  const getSlideStyle = (slide: Slide) => {
-    if (slide.backgroundImage) {
-      return "bg-cover bg-center";
-    }
-    const bgColors: Record<string, string> = {
-      title: "bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600",
-      content: "bg-gradient-to-br from-slate-800 to-slate-900",
-      "two-column": "bg-gradient-to-br from-indigo-800 to-purple-900",
-      quote: "bg-gradient-to-br from-purple-900 via-violet-900 to-slate-900",
-    };
-    return bgColors[slide.layout] || "bg-gradient-to-br from-slate-800 to-slate-900";
   };
 
   return (
@@ -378,24 +394,42 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowFeatureRequestModal(true)}
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              Feature Request
+            </button>
             <div className="relative">
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
                 className="flex items-center gap-3 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all"
               >
-                <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                  {session.user?.name?.[0]?.toUpperCase() || "U"}
+                <div className="relative">
+                  <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                    {session.user?.name?.[0]?.toUpperCase() || "U"}
+                  </div>
+                  {typeof (session.user as { userType?: string })?.userType === "string" && (session.user as { userType: string })?.userType === "admin" && (
+                    <div className="absolute -top-2 -right-2 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center">
+                      <svg className="w-3 h-3 text-yellow-900" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
-                <span className="text-white text-sm">{session.user?.name}</span>
+                <span className="text-white text-sm hidden sm:block">{session.user?.name}</span>
                 <svg className="w-4 h-4 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              
+
               {showDropdown && (
                 <>
-                  <div 
-                    className="fixed inset-0 z-10" 
+                  <div
+                    className="fixed inset-0 z-10"
                     onClick={() => setShowDropdown(false)}
                   />
                   <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 rounded-xl border border-white/10 shadow-xl z-20 overflow-hidden">
@@ -411,6 +445,21 @@ export default function DashboardPage() {
                       Settings
                     </Link>
                     <div className="border-t border-white/10" />
+                    {(session.user as { userType?: string })?.userType === "admin" && (
+                      <>
+                        <Link
+                          href="/admin/feature-requests"
+                          onClick={() => setShowDropdown(false)}
+                          className="flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 transition-all"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          Feature Requests
+                        </Link>
+                        <div className="border-t border-white/10" />
+                      </>
+                    )}
                     <button
                       onClick={() => {
                         setShowDropdown(false);
@@ -514,7 +563,7 @@ export default function DashboardPage() {
                           <h3 className="text-white font-semibold hover:text-purple-300 transition-colors">{p.title}</h3>
                           <p className="text-white/60 text-sm mt-1">{p.topic}</p>
                           <p className="text-white/40 text-xs mt-2">
-                            {new Date(p.updatedAt).toLocaleDateString()}
+                          {new Date(p.updatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} at {new Date(p.updatedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                           </p>
                         </button>
                         <button
@@ -534,35 +583,35 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-white">{presentation.title}</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">{presentation.title}</h1>
                 {topic && (
                   <p className="text-white/60 text-sm mt-1 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                     </svg>
-                    {topic.length > 80 ? topic.slice(0, 80) + "..." : topic}
+                    {topic.length > 60 ? topic.slice(0, 60) + "..." : topic}
                   </p>
                 )}
                 <p className="text-purple-200 mt-1">
                   Slide {currentSlide + 1} of {presentation.slides.length}
                 </p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={generateImages}
+                  onClick={handleGenerateImages}
                   disabled={generatingImages}
-                  className="px-4 py-2 bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 rounded-xl transition-all flex items-center gap-2 disabled:opacity-50"
+                  className="px-3 py-2 bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 rounded-xl transition-all flex items-center gap-2 text-sm disabled:opacity-50"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  {generatingImages ? "Generating..." : "Generate Images"}
+                  {generatingImages ? "Generating..." : "Images"}
                 </button>
                 <button
                   onClick={() => setShowEnhanceModal(true)}
-                  className="px-4 py-2 bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 rounded-xl transition-all flex items-center gap-2"
+                  className="px-3 py-2 bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 rounded-xl transition-all flex items-center gap-2 text-sm"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -571,7 +620,7 @@ export default function DashboardPage() {
                 </button>
                 <button
                   onClick={savePresentation}
-                  className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 rounded-xl transition-all flex items-center gap-2"
+                  className="px-3 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 rounded-xl transition-all flex items-center gap-2 text-sm"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -581,7 +630,7 @@ export default function DashboardPage() {
                 <div className="relative">
                   <button
                     onClick={() => setShowExportMenu(!showExportMenu)}
-                    className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl transition-all flex items-center gap-2"
+                    className="px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl transition-all flex items-center gap-2 text-sm"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -595,18 +644,6 @@ export default function DashboardPage() {
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
                       <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 rounded-xl border border-white/10 shadow-xl z-20 overflow-hidden">
-                        <button
-                          onClick={() => {
-                            openInGoogleSlides();
-                            setShowExportMenu(false);
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 transition-all"
-                        >
-                          <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                          </svg>
-                          To Google Slides
-                        </button>
                         <button
                           onClick={() => {
                             downloadFile("pptx");
@@ -639,60 +676,49 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2">
-                <div
-                  className={`aspect-video rounded-3xl overflow-hidden shadow-2xl ${getSlideStyle(presentation.slides[currentSlide])}`}
-                  style={presentation.slides[currentSlide].backgroundImage ? {
-                    backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${presentation.slides[currentSlide].backgroundImage})`
-                  } : undefined}
-                >
-                  <div className="h-full flex flex-col">
-                    {renderSlideContent(presentation.slides[currentSlide])}
-                  </div>
+              <div className="lg:col-span-2 flex flex-col gap-6">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <h3 className="text-lg font-semibold text-white">Slideshow</h3>
+                  <button
+                    onClick={toggleFullscreen}
+                    className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm ${
+                      fullscreenMode
+                        ? "bg-pink-500/30 text-pink-300"
+                        : "bg-white/10 hover:bg-white/20 text-white"
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      {fullscreenMode ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                      )}
+                    </svg>
+                    {fullscreenMode ? "Exit" : "Fullscreen"}
+                  </button>
                 </div>
 
-                <div className="flex items-center justify-center gap-4 mt-6">
-                  <button
-                    onClick={() => setCurrentSlide(Math.max(0, currentSlide - 1))}
-                    disabled={currentSlide === 0}
-                    className="p-3 bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl text-white transition-all"
-                  >
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-
-                  <div className="flex gap-2">
-                    {presentation.slides.map((slide, idx) => (
-                      <button
-                        key={slide.id}
-                        onClick={() => setCurrentSlide(idx)}
-                        className={`w-3 h-3 rounded-full transition-all flex items-center ${
-                          idx === currentSlide ? "bg-purple-500 w-8" : "bg-white/30 hover:bg-white/50"
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={() => setCurrentSlide(Math.min(presentation.slides.length - 1, currentSlide + 1))}
-                    disabled={currentSlide === presentation.slides.length - 1}
-                    className="p-3 bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed rounded-xl text-white transition-all"
-                  >
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
+                <div id="slideshow-container" className={`${fullscreenMode ? "fixed inset-0 z-50 bg-slate-900" : "rounded-2xl overflow-hidden"}`}>
+                  <Slideshow
+                    slides={presentation.slides}
+                    fullscreenMode={fullscreenMode}
+                    slideAnimations={slideAnimations}
+                    onSlideChange={setCurrentSlide}
+                    onSwiperInit={(swiper) => {
+                      swiperRef.current = swiper;
+                      setCurrentSlide(swiper.activeIndex);
+                    }}
+                  />
                 </div>
               </div>
 
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-white">All Slides</h3>
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
                   {presentation.slides.map((slide, idx) => (
                     <button
                       key={slide.id}
-                      onClick={() => setCurrentSlide(idx)}
+                      onClick={() => swiperRef.current?.slideTo(idx)}
                       className={`w-full p-4 rounded-xl text-left transition-all ${
                         idx === currentSlide
                           ? "bg-purple-500/30 border-2 border-purple-500"
@@ -703,7 +729,7 @@ export default function DashboardPage() {
                         <span className="text-sm text-purple-400 font-medium w-6">{slide.id}</span>
                         <span className="text-white font-medium truncate">{slide.title}</span>
                         {slide.backgroundImage && (
-                          <svg className="w-4 h-4 text-pink-400 ml-auto" fill="currentColor" viewBox="0 0 20 20">
+                          <svg className="w-4 h-4 text-pink-400 ml-auto flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
                           </svg>
                         )}
@@ -796,6 +822,134 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showImagePromptModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-3xl p-6 w-full max-w-lg border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Generate Background Images</h3>
+                <p className="text-white/60 text-sm mt-1">Describe the style of images you want</p>
+              </div>
+              <button
+                onClick={() => setShowImagePromptModal(false)}
+                className="text-white/60 hover:text-white"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-white font-medium mb-2">Image Style</label>
+                <textarea
+                  value={imagePrompt}
+                  onChange={(e) => setImagePrompt(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all resize-none"
+                  placeholder="e.g., Abstract geometric patterns, Cosmic nebula, Minimalist gradients, Nature landscapes"
+                  rows={3}
+                />
+              </div>
+              <div className="bg-pink-500/10 border border-pink-500/20 rounded-xl p-3 text-sm text-pink-200">
+                <p className="font-medium mb-1">Tips:</p>
+                <ul className="list-disc list-inside space-y-1 opacity-80">
+                  <li>Use abstract, decorative styles</li>
+                  <li>Avoid text or words in images</li>
+                  <li>Describe colors and mood</li>
+                </ul>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => generateImages(imagePrompt)}
+                  disabled={!imagePrompt.trim()}
+                  className="flex-1 py-3 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Generate Images
+                </button>
+                <button
+                  onClick={() => setShowImagePromptModal(false)}
+                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFeatureRequestModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-3xl p-6 w-full max-w-lg border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Request a Feature</h3>
+                <p className="text-white/60 text-sm mt-1">Let us know what you would like to see</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFeatureRequestModal(false);
+                  setFeatureRequestMessage("");
+                  setFeatureRequestSubmitted(false);
+                }}
+                className="text-white/60 hover:text-white"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {featureRequestSubmitted ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-white font-medium">Thank you!</p>
+                <p className="text-white/60 text-sm mt-1">Your feature request has been submitted</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <textarea
+                    value={featureRequestMessage}
+                    onChange={(e) => setFeatureRequestMessage(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none"
+                    placeholder="Describe the feature you would like to see..."
+                    rows={4}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={submitFeatureRequest}
+                    disabled={!featureRequestMessage.trim()}
+                    className="flex-1 py-3 bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    Submit Request
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowFeatureRequestModal(false);
+                      setFeatureRequestMessage("");
+                    }}
+                    className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

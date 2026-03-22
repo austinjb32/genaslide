@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "GenaSlide - AI-Powered Presentations",
+  title: "GenASlide - Generate AI-Powered Presentations",
   description: "Create stunning presentations with AI",
 };
 
