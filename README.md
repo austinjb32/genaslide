@@ -4,6 +4,11 @@
 
 GenASlide is my iconic hobby project: a Next.js app that turns a topic into a complete slide deck with AI-generated content, images, and export features. It delivers a polished UX and production-ready export paths (PowerPoint, PDF, Google Slides). 
 
+## 🎥 Demo
+
+- **Live Demo**: [https://genaslide.onrender.com/](https://genaslide.onrender.com/)
+- **Demo Video**: [Google Drive Link](https://drive.google.com/file/d/1lqR8fysrioAMX7_tm6QqjZCrwrAaeMqS/view?usp=sharing)
+
 ---
 
 ## 🎯 Why this project
