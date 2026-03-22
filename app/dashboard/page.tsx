@@ -61,6 +61,7 @@ export default function DashboardPage() {
   const [featureRequestMessage, setFeatureRequestMessage] = useState("");
   const [featureRequestSubmitted, setFeatureRequestSubmitted] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState(false);
+  const [savingPresentation, setSavingPresentation] = useState(false);
   const [slideAnimations, setSlideAnimations] = useState<Record<number, boolean>>({});
   const [credits, setCredits] = useState<number | null>(null);
 
@@ -162,6 +163,8 @@ export default function DashboardPage() {
 
   const savePresentation = async () => {
     if (!presentation) return;
+    setSavingPresentation(true);
+
     try {
       if (presentation.id) {
         const res = await fetch(`/api/presentations/${presentation.id}`, {
@@ -173,7 +176,7 @@ export default function DashboardPage() {
           }),
         });
         if (res.ok) {
-          fetchPresentations();
+          await fetchPresentations();
         }
       } else {
         const res = await fetch("/api/presentations", {
@@ -188,11 +191,13 @@ export default function DashboardPage() {
         if (res.ok) {
           const saved = await res.json();
           setPresentation({ ...presentation, id: saved.id });
-          fetchPresentations();
+          await fetchPresentations();
         }
       }
     } catch (err) {
       console.error("Error saving presentation:", err);
+    } finally {
+      setSavingPresentation(false);
     }
   };
 
@@ -652,12 +657,25 @@ export default function DashboardPage() {
                 </button>
                 <button
                   onClick={savePresentation}
-                  className="px-3 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 rounded-xl transition-all flex items-center gap-2 text-sm"
+                  disabled={savingPresentation}
+                  className="px-3 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 rounded-xl transition-all flex items-center gap-2 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                  </svg>
-                  {presentation.id ? "Update" : "Save"}
+                  {savingPresentation ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                      </svg>
+                      {presentation.id ? "Update" : "Save"}
+                    </>
+                  )}
                 </button>
                 <div className="relative">
                   <button

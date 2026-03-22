@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const replicate = new Replicate({ auth: apiKey });
 
     let prediction = await replicate.predictions.create({
-      version: "fast-sdxl@0.9.1",
+      version: "black-forest-labs/flux-schnell",
       input: {
         prompt: prompt,
         num_inference_steps: 4,
