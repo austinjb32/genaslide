@@ -19,6 +19,7 @@ export async function GET() {
         name: true,
         email: true,
         userType: true,
+        credits: true,
         password: true,
         googleAccessToken: true,
         googleRefreshToken: true,

@@ -1,11 +1,14 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import Replicate from "replicate";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export async function POST(request: Request) {
   const session = await auth();
   
-  if (!session?.user?.email) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -13,6 +16,15 @@ export async function POST(request: Request) {
 
   if (!prompt) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { credits: true },
+  });
+
+  if (!user || user.credits <= 0) {
+    return NextResponse.json({ error: "No credits remaining. Please purchase more credits." }, { status: 403 });
   }
 
   const apiKey = process.env.REPLICATE_API_TOKEN;
@@ -53,7 +65,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to generate image. Please try again." }, { status: 500 });
     }
 
-    return NextResponse.json({ imageUrl });
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: { credits: user.credits - 1 },
+    });
+
+    return NextResponse.json({ imageUrl, creditsRemaining: user.credits - 1 });
   } catch (error) {
     console.error("Error generating image:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to generate image";
