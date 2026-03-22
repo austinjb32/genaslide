@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { title, topic, slides } = await request.json();
+  const { title, topic, slides, imagePrompt } = await request.json();
 
   if (!title || !topic || !slides) {
     return NextResponse.json({ error: "Title, topic, and slides are required" }, { status: 400 });
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
         title,
         topic,
         slides,
+        imagePrompt: imagePrompt || null,
         userId: session.user.id,
       },
     });

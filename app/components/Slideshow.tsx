@@ -22,6 +22,7 @@ interface SlideshowProps {
   onSlideChange: (index: number) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onSwiperInit: (swiper: any) => void;
+  showImagePromptModal: boolean;
 }
 
 const getLayoutClasses = (layout: string, hasImage: boolean) => {
@@ -44,6 +45,7 @@ const Slideshow = ({
   slideAnimations,
   onSlideChange,
   onSwiperInit,
+  showImagePromptModal,
 }: SlideshowProps) => {
   const renderSlideContent = (slide: Slide, isAnimated: boolean) => {
     const animationClass = isAnimated ? "animate-slide-up" : "";
@@ -51,11 +53,11 @@ const Slideshow = ({
     switch (slide.layout) {
       case "title":
         return (
-          <div className="flex flex-col items-center justify-center h-full text-center px-16">
-            <h2 className={`text-6xl md:text-7xl lg:text-8xl font-bold text-white mb-4 ${animationClass}`}>
+          <div className="flex flex-col items-center justify-center h-full text-center px-8 md:px-16">
+            <h2 className={`text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-4 ${animationClass}`}>
               {slide.title}
             </h2>
-            <p className={`text-xl md:text-2xl text-purple-200 max-w-4xl ${animationClass}`}>
+            <p className={`text-lg md:text-xl lg:text-2xl text-purple-200 max-w-4xl ${animationClass}`}>
               {slide.content}
             </p>
           </div>
@@ -63,15 +65,15 @@ const Slideshow = ({
 
       case "quote":
         return (
-          <div className="flex flex-col items-center justify-center h-full text-center px-16">
-            <div className="text-8xl text-purple-500/30 mb-2">&ldquo;</div>
-            <p className="text-2xl md:text-3xl text-white italic mb-6 max-w-4xl">
+          <div className="flex flex-col items-center justify-center h-full text-center px-8 md:px-16">
+            <div className="text-6xl md:text-8xl text-purple-500/30 mb-2">&ldquo;</div>
+            <p className="text-xl md:text-2xl lg:text-3xl text-white italic mb-6 max-w-4xl">
               {slide.content}
             </p>
-            <div className="flex items-center gap-4">
-              <div className="h-px w-16 bg-gradient-to-r from-transparent to-purple-400" />
-              <span className="text-lg font-semibold text-purple-300">{slide.title}</span>
-              <div className="h-px w-16 bg-gradient-to-l from-transparent to-purple-400" />
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="h-px w-8 md:w-16 bg-gradient-to-r from-transparent to-purple-400" />
+              <span className="text-base md:text-lg font-semibold text-purple-300">{slide.title}</span>
+              <div className="h-px w-8 md:w-16 bg-gradient-to-l from-transparent to-purple-400" />
             </div>
           </div>
         );
@@ -79,14 +81,14 @@ const Slideshow = ({
       case "two-column":
         const parts = slide.content.split("|");
         return (
-          <div className="flex flex-col justify-center h-full px-16 py-12">
-            <h3 className={`text-4xl font-bold text-white mb-8 ${animationClass}`}>{slide.title}</h3>
-            <div className="grid grid-cols-2 gap-12">
-              <div className="space-y-4">
-                <p className="text-lg text-purple-200 whitespace-pre-line">{parts[0]?.trim()}</p>
+          <div className="flex flex-col justify-center h-full px-8 md:px-16 py-8 md:py-12">
+            <h3 className={`text-3xl md:text-4xl font-bold text-white mb-6 md:mb-8 ${animationClass}`}>{slide.title}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12">
+              <div className="space-y-3 md:space-y-4">
+                <p className="text-base md:text-lg text-purple-200 whitespace-pre-line">{parts[0]?.trim()}</p>
               </div>
-              <div className="space-y-4 border-l border-white/20 pl-12">
-                <p className="text-lg text-purple-200 whitespace-pre-line">{parts[1]?.trim()}</p>
+              <div className="space-y-3 md:space-y-4 border-t md:border-t-0 md:border-l border-white/20 pt-4 md:pt-0 md:pl-8 md:pl-12">
+                <p className="text-base md:text-lg text-purple-200 whitespace-pre-line">{parts[1]?.trim()}</p>
               </div>
             </div>
           </div>
@@ -97,16 +99,16 @@ const Slideshow = ({
         return (
           <div className="flex flex-col items-center justify-center h-full px-16 py-12">
             <h3 className={`text-4xl font-bold text-white mb-10 ${animationClass}`}>{slide.title}</h3>
-            <div className="grid grid-cols-4 gap-6 w-full max-w-5xl">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 w-full max-w-5xl">
               {statLines.slice(0, 4).map((line, idx) => {
                 const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
-                const [stat, label] = cleanLine.includes(":")
-                  ? [cleanLine.split(":")[0], cleanLine.split(":").slice(1).join(":")]
-                  : ["", cleanLine];
+                const parts = cleanLine.split(":").map((p) => p.trim());
+                const stat = parts[0] || cleanLine;
+                const label = parts.slice(1).join(": ") || " ";
                 return (
-                  <div key={idx} className={`text-center p-6 bg-white/10 rounded-xl backdrop-blur ${animationClass}`}>
-                    <div className="text-4xl font-bold text-purple-400 mb-2">{stat}</div>
-                    <div className="text-sm text-purple-200">{label}</div>
+                  <div key={idx} className={`text-center p-4 md:p-6 bg-white/10 rounded-xl backdrop-blur ${animationClass}`}>
+                    <div className="text-2xl md:text-4xl font-bold text-purple-400 mb-2">{stat}</div>
+                    <div className="text-xs md:text-sm text-purple-200">{label}</div>
                   </div>
                 );
               })}
@@ -117,16 +119,19 @@ const Slideshow = ({
       case "cards":
         const cardLines = slide.content.split("\n").filter((l) => l.trim());
         return (
-          <div className="flex flex-col justify-center h-full px-16 py-12">
-            <h3 className={`text-4xl font-bold text-white mb-8 text-center ${animationClass}`}>{slide.title}</h3>
-            <div className="grid grid-cols-3 gap-6">
+          <div className="flex flex-col justify-center h-full px-8 md:px-16 py-12">
+            <h3 className={`text-3xl md:text-4xl font-bold text-white mb-6 md:mb-8 text-center ${animationClass}`}>{slide.title}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
               {cardLines.slice(0, 3).map((line, idx) => {
                 const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
+                const parts = cleanLine.split(":").map((p) => p.trim());
+                const title = parts[0] || cleanLine;
+                const desc = parts.slice(1).join(": ") || " ";
                 const colors = ["from-purple-500/20 to-pink-500/20", "from-pink-500/20 to-violet-500/20", "from-violet-500/20 to-purple-500/20"];
                 return (
-                  <div key={idx} className={`p-6 bg-gradient-to-br ${colors[idx]} rounded-xl border border-white/10 ${animationClass}`}>
-                    <div className="text-lg font-semibold text-white mb-2">{cleanLine.split(":")[0]}</div>
-                    <div className="text-sm text-purple-200">{cleanLine.split(":")[1]?.trim()}</div>
+                  <div key={idx} className={`p-4 md:p-6 bg-gradient-to-br ${colors[idx]} rounded-xl border border-white/10 ${animationClass}`}>
+                    <div className="text-base md:text-lg font-semibold text-white mb-2">{title}</div>
+                    <div className="text-xs md:text-sm text-purple-200">{desc}</div>
                   </div>
                 );
               })}
@@ -137,18 +142,18 @@ const Slideshow = ({
       case "split":
         const splitLines = slide.content.split("\n").filter((l) => l.trim());
         return (
-          <div className="grid grid-cols-2 h-full">
-            <div className="flex flex-col justify-center px-16 py-12 bg-gradient-to-r from-violet-600/30 to-transparent">
-              <h3 className={`text-5xl font-bold text-white ${animationClass}`}>{slide.title}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 h-full">
+            <div className="flex flex-col justify-center px-8 md:px-16 py-8 md:py-12 bg-gradient-to-r from-violet-600/30 to-transparent">
+              <h3 className={`text-3xl md:text-5xl font-bold text-white ${animationClass}`}>{slide.title}</h3>
             </div>
-            <div className="flex flex-col justify-center px-12 py-12 bg-black/20">
-              <div className="space-y-4">
+            <div className="flex flex-col justify-center px-8 md:px-12 py-8 md:py-12 bg-black/20">
+              <div className="space-y-3 md:space-y-4">
                 {splitLines.slice(0, 4).map((line, idx) => {
                   const cleanLine = line.replace(/^[-•*]\s*/, "").trim();
                   return (
-                    <div key={idx} className="flex items-center gap-4">
-                      <span className="w-2 h-2 bg-pink-400 rounded-full" />
-                      <span className="text-lg text-white">{cleanLine}</span>
+                    <div key={idx} className="flex items-center gap-3 md:gap-4">
+                      <span className="w-2 h-2 bg-pink-400 rounded-full flex-shrink-0" />
+                      <span className="text-base md:text-lg text-white">{cleanLine}</span>
                     </div>
                   );
                 })}
@@ -160,15 +165,15 @@ const Slideshow = ({
       default:
         const lines = slide.content.split("\n").filter((l) => l.trim());
         return (
-          <div className="flex flex-col justify-center h-full px-16 py-12">
-            <h3 className={`text-4xl font-bold text-white mb-6 ${animationClass}`}>{slide.title}</h3>
-            <div className="space-y-3">
+          <div className="flex flex-col justify-center h-full px-8 md:px-16 py-8 md:py-12">
+            <h3 className={`text-3xl md:text-4xl font-bold text-white mb-4 md:mb-6 ${animationClass}`}>{slide.title}</h3>
+            <div className="space-y-2 md:space-y-3">
               {lines.map((line, idx) => {
                 const cleanLine = line.replace(/^[-•*]\s*/, "").replace(/^\d+[.)]\s*/, "").trim();
                 return cleanLine ? (
-                  <div key={idx} className="flex items-start gap-4">
-                    <span className="w-2 h-2 bg-purple-400 rounded-full mt-2" />
-                    <span className="text-xl text-purple-200">{cleanLine}</span>
+                  <div key={idx} className="flex items-start gap-3 md:gap-4">
+                    <span className="w-2 h-2 bg-purple-400 rounded-full mt-2 flex-shrink-0" />
+                    <span className="text-base md:text-xl text-purple-200">{cleanLine}</span>
                   </div>
                 ) : null;
               })}

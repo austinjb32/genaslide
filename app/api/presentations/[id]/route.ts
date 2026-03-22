@@ -43,7 +43,7 @@ export async function PUT(
   }
 
   const { id } = await params;
-  const { title, slides } = await request.json();
+  const { title, slides, imagePrompt } = await request.json();
 
   try {
     const presentation = await prisma.presentation.findFirst({
@@ -56,7 +56,7 @@ export async function PUT(
 
     const updated = await prisma.presentation.update({
       where: { id },
-      data: { title, slides },
+      data: { title, slides, imagePrompt: imagePrompt || null },
     });
 
     return NextResponse.json(updated);

@@ -14,17 +14,17 @@ function tryParseJSON(str: string): object | null {
 function tryFixJSON(str: string): object | null {
   try {
     let fixed = str.trim();
-    
+
     const match = fixed.match(/\{[\s\S]*\}/);
     if (match) {
       fixed = match[0];
     }
-    
+
     const parsed = JSON.parse(fixed);
     if (parsed && typeof parsed === "object" && parsed.title && parsed.slides) {
       return parsed;
     }
-    
+
     return null;
   } catch {
     return null;
@@ -93,7 +93,7 @@ async function generateSlides(apiKey: string, topic: string, systemPrompt: strin
 
 export async function POST(request: Request) {
   const session = await auth();
-  
+
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -114,24 +114,56 @@ export async function POST(request: Request) {
 
   if (existingSlides && existingSlides.length > 0) {
     const slidesJson = JSON.stringify(existingSlides, null, 2);
-    systemPrompt = `You are an expert slide designer. You will enhance or modify existing slides based on user feedback. The user wants to CHANGE or IMPROVE their current presentation.
+    systemPrompt = `You are an expert presentation and slide designer. Your task is to enhance, refine, or modify an existing presentation based on user feedback.
 
-Current slides:
-${slidesJson}
+The user wants to CHANGE or IMPROVE their current presentation.
 
-Return ONLY valid JSON with this exact structure:
+**Input:**
+Current slides: ${slidesJson}
+
+**Instructions:**
+
+* Improve clarity, structure, and visual impact of the slides.
+* Keep content concise, engaging, and presentation-ready.
+* Ensure strong logical flow across slides.
+* Do NOT exceed 10 slides total.
+* If the input has more than 10 slides, intelligently merge or summarize content.
+* Avoid redundancy and unnecessary text.
+
+**Layouts:**
+Use varied layouts appropriately:
+
+* "title" → for title or section introduction slides
+* "content" → for standard slides
+* "two-column" → for comparisons (use "|" to separate columns)
+* "quote" → for impactful statements or key messages
+
+**Image Prompt Guidelines:**
+
+* Provide ONE single imagePrompt that represents the visual theme of the entire presentation.
+* It should describe the overall concept, mood, or design style (not individual slides).
+* Keep it short, clear, and visually descriptive.
+* Use null if no visual theme is appropriate.
+
+**Output Requirements:**
+
+* Return ONLY valid JSON.
+* Do NOT include markdown, code blocks, or explanations.
+
+**Output Format (strict):**
 {
-  "title": "Presentation Title",
-  "slides": [
-    {
-      "id": 1,
-      "title": "Slide Title",
-      "content": "Main content for the slide - keep it concise and impactful",
-      "layout": "title"
-    }
-  ]
+"title": "Presentation Title",
+"imagePrompt": "Short visual theme describing the entire presentation or null",
+"slides": [
+{
+"id": 1,
+"title": "Slide Title",
+"content": "Concise and impactful content",
+"layout": "title"
 }
-Use varied layouts: "title" for title/intro slides, "content" for regular content, "two-column" for comparisons (use | to separate columns), "quote" for impactful quotes.
+]
+}
+
 IMPORTANT: Return ONLY the JSON, no markdown, no code blocks, no explanation.`;
 
     userPrompt = `User wants to change/improve their presentation about "${existingTopic}".\n\nTheir request: ${topic}\n\nPlease modify the slides to address their request. Keep the same structure but change the content as requested.`;

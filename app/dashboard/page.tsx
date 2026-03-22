@@ -28,6 +28,7 @@ interface Presentation {
   title: string;
   topic?: string;
   slides: Slide[];
+  imagePrompt?: string;
 }
 
 interface SavedPresentation {
@@ -173,6 +174,7 @@ export default function DashboardPage() {
           body: JSON.stringify({
             title: presentation.title,
             slides: presentation.slides,
+            imagePrompt: presentation.imagePrompt,
           }),
         });
         if (res.ok) {
@@ -186,6 +188,7 @@ export default function DashboardPage() {
             title: presentation.title,
             topic: topic,
             slides: presentation.slides,
+            imagePrompt: presentation.imagePrompt,
           }),
         });
         if (res.ok) {
@@ -206,7 +209,13 @@ export default function DashboardPage() {
       const res = await fetch(`/api/presentations/${id}`);
       if (res.ok) {
         const data = await res.json();
-        setPresentation({ id: id, title: data.title, topic: data.topic, slides: data.slides });
+        setPresentation({ 
+          id: id, 
+          title: data.title, 
+          topic: data.topic, 
+          slides: data.slides,
+          imagePrompt: data.imagePrompt || "",
+        });
         setTopic(data.topic || "");
         setCurrentSlide(0);
         setSlideAnimations({});
@@ -232,13 +241,18 @@ export default function DashboardPage() {
   };
 
   const handleGenerateImages = () => {
+    setImagePrompt(presentation?.imagePrompt || "");
     setShowImagePromptModal(true);
   };
 
   const generateImages = async (customPrompt: string) => {
     if (!presentation) return;
-    setGeneratingImages(true);
     setShowImagePromptModal(false);
+    setGeneratingImages(true);
+
+    let currentPresentation = { ...presentation, imagePrompt: customPrompt };
+    setPresentation(currentPresentation);
+    setGeneratingImages(true);
 
     try {
       let currentPresentation = presentation;
@@ -251,6 +265,7 @@ export default function DashboardPage() {
             title: currentPresentation.title,
             topic: topic,
             slides: currentPresentation.slides,
+            imagePrompt: currentPresentation.imagePrompt,
           }),
         });
         if (res.ok) {
@@ -258,16 +273,31 @@ export default function DashboardPage() {
           currentPresentation = { ...currentPresentation, id: saved.id };
           setPresentation(currentPresentation);
         }
+      } else {
+        await fetch(`/api/presentations/${currentPresentation.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: currentPresentation.title,
+            slides: currentPresentation.slides,
+            imagePrompt: currentPresentation.imagePrompt,
+          }),
+        });
       }
 
       for (let i = 0; i < currentPresentation.slides.length; i++) {
         const slide = currentPresentation.slides[i];
         if (slide.layout === "title" || slide.layout === "quote") {
           setCurrentSlide(i);
+
+          const combinedPrompt = currentPresentation.imagePrompt
+            ? `${currentPresentation.imagePrompt}. Topic: ${topic || currentPresentation.title}`
+            : `${currentPresentation.title} ${topic || ""}`;
+
           const res = await fetch("/api/images", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: customPrompt }),
+            body: JSON.stringify({ prompt: combinedPrompt }),
           });
 
           if (res.ok) {
@@ -284,6 +314,7 @@ export default function DashboardPage() {
               body: JSON.stringify({
                 title: currentPresentation.title,
                 slides: currentPresentation.slides,
+                imagePrompt: currentPresentation.imagePrompt,
               }),
             });
           } else {
@@ -634,6 +665,7 @@ export default function DashboardPage() {
                 <p className="text-purple-200 mt-1">
                   Slide {currentSlide + 1} of {presentation.slides.length}
                 </p>
+      
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -673,7 +705,7 @@ export default function DashboardPage() {
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                       </svg>
-                      {presentation.id ? "Update" : "Save"}
+                      Save
                     </>
                   )}
                 </button>
@@ -758,6 +790,7 @@ export default function DashboardPage() {
                       swiperRef.current = swiper;
                       setCurrentSlide(swiper.activeIndex);
                     }}
+                    showImagePromptModal={showImagePromptModal}
                   />
                 </div>
               </div>
@@ -792,6 +825,63 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+
+      {showImagePromptModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-3xl p-6 w-full max-w-lg border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Generate Background Images</h3>
+                <p className="text-white/60 text-sm mt-1">Enter a visual theme prompt for slides</p>
+              </div>
+              <button
+                onClick={() => setShowImagePromptModal(false)}
+                className="text-white/60 hover:text-white"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4">
+              {credits !== null && (
+                <div className="flex items-center justify-between bg-pink-500/10 border border-pink-500/20 rounded-xl p-3">
+                  <span className="text-pink-200 text-sm">Credits remaining:</span>
+                  <span className={`text-lg font-bold ${credits > 0 ? "text-pink-400" : "text-red-400"}`}>{credits}</span>
+                </div>
+              )}
+              <div>
+                <label className="block text-white font-medium mb-2">Image Prompt</label>
+                <textarea
+                  value={imagePrompt}
+                  onChange={(e) => setImagePrompt(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all resize-none"
+                  placeholder="e.g., Cosmic nebula, futuristic city scape, soft nature gradients"
+                  rows={3}
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => generateImages(imagePrompt)}
+                  disabled={!imagePrompt.trim() || credits === 0}
+                  className="flex-1 py-3 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  {credits === 0 ? "No Credits Left" : "Generate Images"}
+                </button>
+                <button
+                  onClick={() => setShowImagePromptModal(false)}
+                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showEnhanceModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -866,71 +956,6 @@ export default function DashboardPage() {
                     setShowEnhanceModal(false);
                     setEnhancePrompt("");
                   }}
-                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showImagePromptModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-3xl p-6 w-full max-w-lg border border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-xl font-semibold text-white">Generate Background Images</h3>
-                <p className="text-white/60 text-sm mt-1">Describe the style of images you want</p>
-              </div>
-              <button
-                onClick={() => setShowImagePromptModal(false)}
-                className="text-white/60 hover:text-white"
-              >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-4">
-              {credits !== null && (
-                <div className="flex items-center justify-between bg-pink-500/10 border border-pink-500/20 rounded-xl p-3">
-                  <span className="text-pink-200 text-sm">Credits remaining:</span>
-                  <span className={`text-lg font-bold ${credits > 0 ? "text-pink-400" : "text-red-400"}`}>{credits}</span>
-                </div>
-              )}
-              <div>
-                <label className="block text-white font-medium mb-2">Image Style</label>
-                <textarea
-                  value={imagePrompt}
-                  onChange={(e) => setImagePrompt(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all resize-none"
-                  placeholder="e.g., Abstract geometric patterns, Cosmic nebula, Minimalist gradients, Nature landscapes"
-                  rows={3}
-                />
-              </div>
-              <div className="bg-pink-500/10 border border-pink-500/20 rounded-xl p-3 text-sm text-pink-200">
-                <p className="font-medium mb-1">Tips:</p>
-                <ul className="list-disc list-inside space-y-1 opacity-80">
-                  <li>Use abstract, decorative styles</li>
-                  <li>Avoid text or words in images</li>
-                  <li>Describe colors and mood</li>
-                </ul>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => generateImages(imagePrompt)}
-                  disabled={!imagePrompt.trim() || credits === 0}
-                  className="flex-1 py-3 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  {credits === 0 ? "No Credits Left" : "Generate Images"}
-                </button>
-                <button
-                  onClick={() => setShowImagePromptModal(false)}
                   className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
                 >
                   Cancel
